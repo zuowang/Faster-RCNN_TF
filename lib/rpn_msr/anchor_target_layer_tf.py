@@ -169,14 +169,17 @@ def anchor_target_layer(rpn_cls_score, gt_boxes, im_info, data, _feat_stride = [
             #len(bg_inds), len(disable_inds), np.sum(labels == 0))
 
     bbox_targets = np.zeros((len(inds_inside), 4), dtype=np.float32)
+    #每个anchors和gt_boxes的dx,dy,dw,dh
     bbox_targets = _compute_targets(anchors, gt_boxes[argmax_overlaps, :])
-
+    
     bbox_inside_weights = np.zeros((len(inds_inside), 4), dtype=np.float32)
+    #如果是object，为[1,1,1,1],否则[0,0,0,0]
     bbox_inside_weights[labels == 1, :] = np.array(cfg.TRAIN.RPN_BBOX_INSIDE_WEIGHTS)
 
     bbox_outside_weights = np.zeros((len(inds_inside), 4), dtype=np.float32)
     if cfg.TRAIN.RPN_POSITIVE_WEIGHT < 0:
         # uniform weighting of examples (given non-uniform sampling)
+        #positive（是object）和negtive（是背景）的数量, num_examples=256
         num_examples = np.sum(labels >= 0)
         positive_weights = np.ones((1, 4)) * 1.0 / num_examples
         negative_weights = np.ones((1, 4)) * 1.0 / num_examples
@@ -187,6 +190,8 @@ def anchor_target_layer(rpn_cls_score, gt_boxes, im_info, data, _feat_stride = [
                             np.sum(labels == 1))
         negative_weights = ((1.0 - cfg.TRAIN.RPN_POSITIVE_WEIGHT) /
                             np.sum(labels == 0))
+    
+    #如果是object或者背景，[ 0.00390625,  0.00390625,  0.00390625,  0.00390625]  0.00390625=1/256
     bbox_outside_weights[labels == 1, :] = positive_weights
     bbox_outside_weights[labels == 0, :] = negative_weights
 

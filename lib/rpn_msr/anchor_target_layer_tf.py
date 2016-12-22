@@ -22,6 +22,7 @@ def anchor_target_layer(rpn_cls_score, gt_boxes, im_info, data, _feat_stride = [
     Assign anchors to ground-truth targets. Produces anchor classification
     labels and bounding-box regression targets.
     """
+    # 3*3 个anchors，4维向量，左上角和右下角坐标，x1,y1,x2,y2
     _anchors = generate_anchors(scales=np.array(anchor_scales))
     _num_anchors = _anchors.shape[0]
 
@@ -29,6 +30,7 @@ def anchor_target_layer(rpn_cls_score, gt_boxes, im_info, data, _feat_stride = [
         print 'anchors:'
         print _anchors
         print 'anchor shapes:'
+        #打印anchor的宽和高
         print np.hstack((
             _anchors[:, 2::4] - _anchors[:, 0::4],
             _anchors[:, 3::4] - _anchors[:, 1::4],
@@ -64,13 +66,16 @@ def anchor_target_layer(rpn_cls_score, gt_boxes, im_info, data, _feat_stride = [
     if DEBUG:
         print 'AnchorTargetLayer: height', height, 'width', width
         print ''
+        #图像尺寸和缩放比
         print 'im_size: ({}, {})'.format(im_info[0], im_info[1])
         print 'scale: {}'.format(im_info[2])
         print 'height, width: ({}, {})'.format(height, width)
+        #groundtruth box，1到多个，5维向量，前4维坐标，最后1维类别
         print 'rpn: gt_boxes.shape', gt_boxes.shape
         print 'rpn: gt_boxes', gt_boxes
 
     # 1. Generate proposals from bbox deltas and shifted anchors
+    #将9个anchor，向左和向下，_feat_stride=16为步长，移动，构造上万个anchor
     shift_x = np.arange(0, width) * _feat_stride
     shift_y = np.arange(0, height) * _feat_stride
     shift_x, shift_y = np.meshgrid(shift_x, shift_y)
@@ -88,6 +93,7 @@ def anchor_target_layer(rpn_cls_score, gt_boxes, im_info, data, _feat_stride = [
     total_anchors = int(K * A)
 
     # only keep anchors inside the image
+    #保留在图像中的anchors
     inds_inside = np.where(
         (all_anchors[:, 0] >= -_allowed_border) &
         (all_anchors[:, 1] >= -_allowed_border) &
@@ -110,28 +116,38 @@ def anchor_target_layer(rpn_cls_score, gt_boxes, im_info, data, _feat_stride = [
 
     # overlaps between the anchors and the gt boxes
     # overlaps (ex, gt)
+    #计算anchors和groundtrue boxes的overlap，每对anchor和groundtrue box计算一个比率（IOU Intersection-over-Union）
     overlaps = bbox_overlaps(
         np.ascontiguousarray(anchors, dtype=np.float),
         np.ascontiguousarray(gt_boxes, dtype=np.float))
+    #每个anchors对应比率最大的groundtrue box
     argmax_overlaps = overlaps.argmax(axis=1)
+    #每个anchors对应最大的比率
     max_overlaps = overlaps[np.arange(len(inds_inside)), argmax_overlaps]
+    #每个groundtrue boxes对应比率最大的anchor
     gt_argmax_overlaps = overlaps.argmax(axis=0)
+    #每个groundtrue boxes对应最大的比率
     gt_max_overlaps = overlaps[gt_argmax_overlaps,
                                np.arange(overlaps.shape[1])]
+    #groundtrue boxes对应最大比率的anchors下标，一个groundtrue box可能对应多个相同最大比率的anchors
     gt_argmax_overlaps = np.where(overlaps == gt_max_overlaps)[0]
 
     if not cfg.TRAIN.RPN_CLOBBER_POSITIVES:
         # assign bg labels first so that positive labels can clobber them
+        #如果anchor对应最大的比率小于0.3，说明该anchor中存在object的可能很小，应该都是背景
         labels[max_overlaps < cfg.TRAIN.RPN_NEGATIVE_OVERLAP] = 0
 
     # fg label: for each gt, anchor with highest overlap
+    # 这些anchors有对应的groundtrue boxes，所以是objects
     labels[gt_argmax_overlaps] = 1
 
     # fg label: above threshold IOU
+    # 如果anchor对应的最大比率大于0.7，可能是objects
     labels[max_overlaps >= cfg.TRAIN.RPN_POSITIVE_OVERLAP] = 1
 
     if cfg.TRAIN.RPN_CLOBBER_POSITIVES:
         # assign bg labels last so that negative labels can clobber positives
+        # 如果anchor对应的最大比率小于0.3,不太可能是object
         labels[max_overlaps < cfg.TRAIN.RPN_NEGATIVE_OVERLAP] = 0
 
     # subsample positive labels if we have too many
